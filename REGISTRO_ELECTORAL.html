@@ -325,11 +325,29 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       <label for="ev-nombre">Tu nombre completo</label>
       <input id="ev-nombre" placeholder="Nombre y apellidos">
 
-      <label for="ev-cedula">Cédula (opcional)</label>
+      <label for="ev-cedula">Cédula</label>
       <input id="ev-cedula" data-mono placeholder="000-0000000-0" maxlength="13">
 
-      <label for="ev-celular">Celular (opcional)</label>
+      <label for="ev-celular">Celular</label>
       <input id="ev-celular" data-mono placeholder="(809) 000-0000" maxlength="14">
+
+      <label for="ev-municipio">Municipio</label>
+      <select id="ev-municipio">
+        <option value="">Seleccione…</option>
+        <option>Bonao</option>
+        <option>Maimón</option>
+        <option>Piedra Blanca (Juma)</option>
+        <option>Otro</option>
+      </select>
+
+      <label for="ev-distrito">Distrito municipal</label>
+      <select id="ev-distrito">
+        <option value="">Zona urbana (cabecera municipal)</option>
+      </select>
+
+      <label for="ev-sector">Sector / Barrio / Comunidad</label>
+      <input id="ev-sector" list="dl-ev-sector" placeholder="Escriba su sector o barrio">
+      <datalist id="dl-ev-sector"></datalist>
 
       <label for="ev-acompanantes">¿Cuántas personas más llevas contigo?</label>
       <input id="ev-acompanantes" type="number" min="0" value="0" inputmode="numeric">
@@ -1029,15 +1047,58 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       }
     }
 
+    function poblarDistritoEvento(municipioNombre){
+      const sel = $("#ev-distrito");
+      const muni = RD_MUNICIPIOS.find(m=>m.n===municipioNombre);
+      let opts = '<option value="">Zona urbana (cabecera municipal)</option>';
+      if(muni){
+        const list = RD_DISTRITOS.filter(d=>d.m===muni.i).sort((a,b)=>a.n.localeCompare(b.n,"es"));
+        opts += list.map(d=>`<option value="${escapeHtml(d.n)}">${escapeHtml(d.n)} (D.M.)</option>`).join("");
+      }
+      sel.innerHTML = opts;
+    }
+    function poblarSectorEvento(municipioNombre, distritoNombre){
+      const opciones = new Set();
+      const muni = RD_MUNICIPIOS.find(m=>m.n===municipioNombre);
+      if(muni){
+        const distObj = distritoNombre ? RD_DISTRITOS.find(d=>d.m===muni.i && d.n===distritoNombre) : null;
+        const distId = distObj ? distObj.i : 0;
+        const seccionesFiltradas = RD_SECCIONES.filter(s=> s.m===muni.i && s.d===distId);
+        const seccionIds = new Set(seccionesFiltradas.map(s=>s.i));
+        seccionesFiltradas.forEach(s=> opciones.add(s.n));
+        RD_BARRIOS.forEach(b=>{ if(seccionIds.has(b.s)) opciones.add(b.n); });
+      }
+      $("#dl-ev-sector").innerHTML = [...opciones].sort((a,b)=>a.localeCompare(b,"es")).map(v=>`<option value="${escapeHtml(v)}">`).join("");
+    }
+    $("#ev-municipio").addEventListener("change", (e)=>{
+      poblarDistritoEvento(e.target.value);
+      poblarSectorEvento(e.target.value, "");
+    });
+    $("#ev-distrito").addEventListener("change", (e)=>{
+      poblarSectorEvento($("#ev-municipio").value, e.target.value);
+    });
+    $("#ev-celular").addEventListener("input", formatearCelular);
+    $("#ev-cedula").addEventListener("input", (e)=>{
+      let v = e.target.value.replace(/\D/g,"").slice(0,11);
+      if(v.length > 3) v = v.slice(0,3)+"-"+v.slice(3);
+      if(v.length > 11) v = v.slice(0,11)+"-"+v.slice(11);
+      e.target.value = v;
+    });
+
     $("#btnConfirmarAsistencia").addEventListener("click", async ()=>{
       const codigo = $("#ev-codigo").value.trim().toUpperCase();
       const nombre = $("#ev-nombre").value.trim();
       const cedula = $("#ev-cedula").value.trim();
       const celular = $("#ev-celular").value.trim();
+      const municipio = $("#ev-municipio").value;
+      const distrito = $("#ev-distrito").value;
+      const sector = $("#ev-sector").value.trim();
       const acompanantes = Math.max(0, parseInt($("#ev-acompanantes").value, 10) || 0);
 
       $("#eventoError").classList.remove("show");
       if(!nombre){ $("#eventoError").textContent = "Escribe tu nombre completo."; $("#eventoError").classList.add("show"); return; }
+      if(!celular){ $("#eventoError").textContent = "El celular es obligatorio."; $("#eventoError").classList.add("show"); return; }
+      if(!municipio){ $("#eventoError").textContent = "Selecciona tu municipio."; $("#eventoError").classList.add("show"); return; }
       if(!supabaseClient || !navigator.onLine){ $("#eventoError").textContent = "Necesitas internet para confirmar tu asistencia."; $("#eventoError").classList.add("show"); return; }
 
       $("#btnConfirmarAsistencia").disabled = true;
@@ -1052,7 +1113,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       }
 
       const {error} = await supabaseClient.from("orlando_evento_asistencia").insert({
-        nombre, cedula: cedula||null, celular: celular||null, acompanantes,
+        nombre, cedula: cedula||null, celular, municipio, distrito: distrito||null, sector: sector||null, acompanantes,
         coordinador: coordinadorNombre || null, codigo_usado: codigo || null
       });
 
@@ -1890,7 +1951,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--papel-linea);">
         <div>
           <b style="font-family:var(--font-display); color:var(--azul-950); font-size:14px;">${escapeHtml(f.nombre)}</b>
-          <div style="font-size:11.5px; color:var(--gris);">${f.acompanantes ? "+"+f.acompanantes+" acompañante(s) · " : ""}${escapeHtml(f.coordinador||"Sin coordinador")}${f.celular ? " · "+escapeHtml(f.celular) : ""}</div>
+          <div style="font-size:11.5px; color:var(--gris);">${f.acompanantes ? "+"+f.acompanantes+" acompañante(s) · " : ""}${escapeHtml(f.coordinador||"Sin coordinador")}${f.municipio ? " · "+escapeHtml(f.municipio) : ""}${f.celular ? " · "+escapeHtml(f.celular) : ""}</div>
         </div>
         <span style="font-size:11px; color:var(--gris); font-family:var(--font-mono); white-space:nowrap;">${tiempoTranscurrido(f.fecha)}</span>
       </div>
@@ -1902,8 +1963,8 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
 
   $("#btnExportEvento").addEventListener("click", ()=>{
     const filas = eventoFilasFiltradas();
-    const rows = [["Nombre","Cédula","Celular","Acompañantes","Coordinador","Código usado","Fecha"]];
-    filas.forEach(f=> rows.push([f.nombre, f.cedula, f.celular, f.acompanantes, f.coordinador, f.codigo_usado, f.fecha ? new Date(f.fecha).toLocaleString("es-DO") : ""]));
+    const rows = [["Nombre","Cédula","Celular","Municipio","Distrito","Sector","Acompañantes","Coordinador","Código usado","Fecha"]];
+    filas.forEach(f=> rows.push([f.nombre, f.cedula, f.celular, f.municipio, f.distrito, f.sector, f.acompanantes, f.coordinador, f.codigo_usado, f.fecha ? new Date(f.fecha).toLocaleString("es-DO") : ""]));
     downloadXLSX(rows, "asistencia_evento_filtrada.xlsx", "Asistencia");
   });
 
