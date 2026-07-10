@@ -825,6 +825,22 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
         igual que haces con tus otros clientes. Este formulario solo cambia el texto de esta instalación.
       </p>
     </div>
+
+    <div class="card">
+      <h2><span class="n">Acceso</span> Administradores</h2>
+      <p style="font-size:12.5px; color:var(--gris); margin:0 0 14px;">
+        Crea otra cuenta con acceso total de administrador (todas las pestañas, todos los datos).
+      </p>
+      <div id="adminMsg" class="msg"></div>
+      <label for="ad-nombre">Nombre completo</label>
+      <input id="ad-nombre" placeholder="Nombre del nuevo administrador">
+      <label for="ad-email">Correo</label>
+      <input id="ad-email" type="email" placeholder="correo@ejemplo.com">
+      <label for="ad-pass">Contraseña (mínimo 6 caracteres)</label>
+      <input id="ad-pass" type="password" placeholder="••••••••">
+      <button class="btn btn-primary" id="btnCrearAdmin">Crear administrador</button>
+      <div id="adminLista" style="margin-top:14px;"></div>
+    </div>
   </section>
 
 </main>
@@ -1002,7 +1018,48 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     $("#cfg-nombre").value = BRANDING.nombre;
     $("#cfg-cargo").value = BRANDING.cargo;
     $("#cfg-circunscripcion").value = BRANDING.circunscripcion;
+    renderListaAdmins();
   }
+
+  function renderListaAdmins(){
+    const admins = USUARIOS.filter(u=>u.tipo==="admin");
+    $("#adminLista").innerHTML = admins.length ? `
+      <p style="font-size:11.5px; color:var(--gris); text-transform:uppercase; font-weight:700; margin:0 0 8px;">Administradores actuales</p>
+      ${admins.map(a=>`<div style="padding:6px 0; border-bottom:1px solid var(--papel-linea); font-size:13px;"><b style="color:var(--azul-950);">${escapeHtml(a.nombre)}</b> — ${escapeHtml(a.email||"")}</div>`).join("")}
+    ` : "";
+  }
+
+  $("#btnCrearAdmin").addEventListener("click", async ()=>{
+    const nombre = $("#ad-nombre").value.trim();
+    const email = $("#ad-email").value.trim();
+    const pass = $("#ad-pass").value;
+    if(!nombre || !email || pass.length < 6){ showMsg("#adminMsg","Completa nombre, correo y una contraseña de al menos 6 caracteres.","err"); return; }
+    if(!supabaseClient || !navigator.onLine){ showMsg("#adminMsg","Necesitas internet para crear un administrador.","err"); return; }
+
+    const tempClient = crearClienteTemporal();
+    try{
+      const {data, error} = await tempClient.auth.signUp({email, password: pass});
+      if(error){
+        showMsg("#adminMsg", error.message.includes("registered") ? "Ese correo ya está en uso." : "No se pudo crear la cuenta: "+error.message, "err");
+        return;
+      }
+      if(!data.session){
+        showMsg("#adminMsg","Se creó la cuenta pero falta confirmarla. Ve a Supabase > Authentication > Providers > Email y desactiva 'Confirm email'.","err");
+        return;
+      }
+      // El perfil se inserta con la sesión del admin actual (no la temporal), por eso puede ser tipo "admin".
+      const {error: errPerfil} = await supabaseClient.from("orlando_perfiles").insert({
+        user_id: data.user.id, tipo:"admin", nombre, email, activo:true, updated_at:new Date().toISOString()
+      });
+      if(errPerfil){ showMsg("#adminMsg","La cuenta se creó pero no se pudo guardar su perfil: "+errPerfil.message,"err"); return; }
+      showMsg("#adminMsg","Administrador creado.","ok");
+      $("#ad-nombre").value = ""; $("#ad-email").value = ""; $("#ad-pass").value = "";
+      await pullPerfilesAdmin(); await loadUsuarios(); renderListaAdmins();
+    }catch(e){
+      console.error(e);
+      showMsg("#adminMsg","Ocurrió un error creando el administrador.","err");
+    }
+  });
 
   $("#btnGuardarConfig").addEventListener("click", async ()=>{
     const nombre = $("#cfg-nombre").value.trim();
