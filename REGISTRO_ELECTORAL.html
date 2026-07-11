@@ -458,9 +458,10 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     </div>
 
     <div class="card" id="dashCoordinadoresCard">
-      <h2><span class="n">Top</span> Coordinadores</h2>
+      <h2><span class="n">Cuentas</span> Coordinadores y sus registros</h2>
       <table class="rep"><tbody id="dashTopCoordinadores"></tbody></table>
     </div>
+    <p style="font-size:11px; color:var(--gris); margin:-10px 0 16px; text-align:center;">Para editar, activar/desactivar o eliminar cuentas, ve a la pestaña "Coordinadores".</p>
 
     <div class="card">
       <h2><span class="n">Reciente</span> Últimos registros</h2>
@@ -2333,19 +2334,22 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       <tr><td class="bar-cell">${escapeHtml(k)}<span class="bar" style="width:${(c/maxMun*100)}%"></span></td><td class="count">${c}</td></tr>
     `).join("") : '<tr><td style="color:var(--gris);">Sin registros todavía</td></tr>';
 
-    // Top coordinadores (solo admin)
+    // Top coordinadores (solo admin) — usa las cuentas reales de la pestaña Coordinadores,
+    // no los nombres sueltos escritos en los registros de votantes.
     const isAdmin = session && session.role === "admin";
     $("#dashCoordinadoresCard").style.display = isAdmin ? "block" : "none";
     $("#dashCoordCard").style.display = isAdmin ? "block" : "none";
     if(isAdmin){
-      $("#dashCoords").textContent = new Set(base.map(v=>v.coordinador).filter(Boolean)).size;
+      const coordCuentas = USUARIOS.filter(u=>u.tipo==="coordinador");
+      $("#dashCoords").textContent = coordCuentas.length;
       const conteoCoord = {};
       base.forEach(v=>{ if(v.coordinador) conteoCoord[v.coordinador] = (conteoCoord[v.coordinador]||0)+1; });
-      const topCoord = Object.entries(conteoCoord).sort((a,b)=>b[1]-a[1]).slice(0,6);
+      coordCuentas.forEach(u=>{ if(!(u.nombre in conteoCoord)) conteoCoord[u.nombre] = 0; });
+      const topCoord = Object.entries(conteoCoord).sort((a,b)=>b[1]-a[1]).slice(0,10);
       const maxCoord = Math.max(...topCoord.map(d=>d[1]),1);
       $("#dashTopCoordinadores").innerHTML = topCoord.length ? topCoord.map(([k,c])=>`
         <tr><td class="bar-cell">${escapeHtml(k)}<span class="bar" style="width:${(c/maxCoord*100)}%"></span></td><td class="count">${c}</td></tr>
-      `).join("") : '<tr><td style="color:var(--gris);">Sin registros todavía</td></tr>';
+      `).join("") : '<tr><td style="color:var(--gris);">Sin coordinadores creados todavía</td></tr>';
     }
 
     // Actividad reciente
