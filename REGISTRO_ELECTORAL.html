@@ -474,6 +474,11 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       <div class="stat"><b id="evAcompanantes">0</b><span>Acompañantes</span></div>
       <div class="stat"><b id="evGranTotal">0</b><span>Total esperado</span></div>
     </div>
+    <div class="stats" id="evStatsCoordCard">
+      <div class="stat"><b id="evTotalCoords">0</b><span>Coordinadores</span></div>
+      <div class="stat"><b id="evCoordsConCodigo">0</b><span>Con enlace generado</span></div>
+      <div class="stat"><b id="evCoordsSinConfirmar">0</b><span>Sin ninguna confirmación</span></div>
+    </div>
 
     <div class="card" id="evReportesCard">
       <h2><span class="n">Reportes</span> Del evento</h2>
@@ -505,6 +510,15 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       </div>
       <div id="evLista"></div>
       <button class="btn btn-outline btn-block" id="btnExportEvento" style="margin-top:12px;">Exportar lista filtrada (Excel)</button>
+    </div>
+
+    <div class="card" id="evGestionCoordCard">
+      <h2><span class="n">Gestionar</span> Coordinadores</h2>
+      <p style="font-size:12.5px; color:var(--gris); margin:0 0 14px;">
+        Editar, activar/desactivar, cambiar permisos, eliminar, y enviar el enlace de invitación a varios a la vez
+        (con checkbox) está en la pestaña <b>Coordinadores</b>.
+      </p>
+      <button class="btn btn-gold btn-block" id="btnIrACoordinadores">Ir a Coordinadores →</button>
     </div>
   </section>
 
@@ -2058,6 +2072,17 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
 
     const isAdmin = session && session.role === "admin";
     $("#evReportesCard").style.display = isAdmin ? "block" : "none";
+    $("#evStatsCoordCard").style.display = isAdmin ? "grid" : "none";
+    $("#evGestionCoordCard").style.display = isAdmin ? "block" : "none";
+
+    if(isAdmin){
+      const todosCoords = USUARIOS.filter(u=>u.tipo==="coordinador");
+      const confirmadosPorCoord = {};
+      filas.forEach(f=>{ if(f.coordinador) confirmadosPorCoord[f.coordinador] = (confirmadosPorCoord[f.coordinador]||0)+1; });
+      $("#evTotalCoords").textContent = todosCoords.length;
+      $("#evCoordsConCodigo").textContent = todosCoords.filter(u=>u.codigo_evento).length;
+      $("#evCoordsSinConfirmar").textContent = todosCoords.filter(u=> !confirmadosPorCoord[u.nombre]).length;
+    }
 
     // Poblar filtro de coordinador
     const selCoord = $("#evFiltroCoord");
@@ -2081,18 +2106,94 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     });
   }
 
+  $("#btnIrACoordinadores").addEventListener("click", ()=>{
+    $$(".tab-btn").forEach(b=>b.classList.remove("active"));
+    $$(".view").forEach(v=>v.classList.remove("active"));
+    document.querySelector('[data-view="v-coordinadores"]').classList.add("active");
+    $("#v-coordinadores").classList.add("active");
+    renderCoordList();
+  });
+
   function renderEventoLista(){
     const filas = eventoFilasFiltradas();
+    const isAdmin = session && session.role === "admin";
     $("#evLista").innerHTML = filas.length ? filas.slice(0,150).map(f=>`
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--papel-linea);">
-        <div>
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--papel-linea); gap:8px;">
+        <div style="min-width:0;">
           <b style="font-family:var(--font-display); color:var(--azul-950); font-size:14px;">${escapeHtml(f.nombre)}</b>
           <div style="font-size:11.5px; color:var(--gris);">${f.acompanantes ? "+"+f.acompanantes+" acompañante(s) · " : ""}${escapeHtml(f.coordinador||"Sin coordinador")}${f.invitado_por ? " · Invitado por: "+escapeHtml(f.invitado_por) : ""}${f.municipio ? " · "+escapeHtml(f.municipio) : ""}${f.celular ? " · "+escapeHtml(f.celular) : ""}</div>
+          ${isAdmin ? `<div style="display:flex; gap:6px; margin-top:6px;">
+            <button class="btn btn-sm btn-gold" data-evaccion="editar" data-id="${f.id}">Editar</button>
+            <button class="btn btn-sm btn-red" data-evaccion="borrar" data-id="${f.id}">Borrar</button>
+          </div>` : ""}
         </div>
         <span style="font-size:11px; color:var(--gris); font-family:var(--font-mono); white-space:nowrap;">${tiempoTranscurrido(f.fecha)}</span>
       </div>
     `).join("") : '<div class="empty"><b>Sin resultados</b>Ajusta la búsqueda o comparte el enlace de invitación.</div>';
   }
+
+  $("#evLista").addEventListener("click", async (e)=>{
+    const btn = e.target.closest("button[data-evaccion]");
+    if(!btn) return;
+    const id = btn.dataset.id;
+    const filas = window._eventoFilas || [];
+    const f = filas.find(x=>String(x.id)===String(id));
+    if(!f) return;
+
+    if(btn.dataset.evaccion === "editar"){
+      $("#modalTitle").textContent = "Editar confirmación";
+      $("#modalBody").innerHTML = `
+        <div id="editEvMsg" class="msg"></div>
+        <label for="ee-nombre">Nombre completo</label>
+        <input id="ee-nombre" value="${escapeHtml(f.nombre||"")}">
+        <label for="ee-cedula">Cédula</label>
+        <input id="ee-cedula" data-mono value="${escapeHtml(f.cedula||"")}" maxlength="13">
+        <label for="ee-celular">Celular</label>
+        <input id="ee-celular" data-mono value="${escapeHtml(f.celular||"")}" maxlength="14">
+        <label for="ee-municipio">Municipio</label>
+        <input id="ee-municipio" value="${escapeHtml(f.municipio||"")}">
+        <label for="ee-sector">Sector / Barrio / Comunidad</label>
+        <input id="ee-sector" value="${escapeHtml(f.sector||"")}">
+        <label for="ee-acompanantes">Acompañantes</label>
+        <input id="ee-acompanantes" type="number" min="0" value="${f.acompanantes||0}">
+        <label for="ee-coordinador">Coordinador</label>
+        <input id="ee-coordinador" value="${escapeHtml(f.coordinador||"")}">
+        <button class="btn btn-primary" id="btnGuardarEdicionEvento" data-id="${f.id}">Guardar cambios</button>`;
+      $("#ee-celular").addEventListener("input", formatearCelular);
+      $("#modalBg").classList.add("show");
+      return;
+    }
+
+    if(btn.dataset.evaccion === "borrar"){
+      if(confirm("¿Borrar la confirmación de "+f.nombre+"? Esta acción no se puede deshacer.")){
+        if(!supabaseClient || !navigator.onLine){ alert("Necesitas internet para borrar."); return; }
+        const {error} = await supabaseClient.from("orlando_evento_asistencia").delete().eq("id", f.id);
+        if(error){ alert("No se pudo borrar: "+error.message); return; }
+        await renderEvento();
+      }
+    }
+  });
+
+  $("#modalBody").addEventListener("click", async (e)=>{
+    if(e.target.id !== "btnGuardarEdicionEvento") return;
+    const id = e.target.dataset.id;
+    if(!supabaseClient || !navigator.onLine){ showMsg("#editEvMsg","Necesitas internet para guardar.","err"); return; }
+    const cambios = {
+      nombre: $("#ee-nombre").value.trim(),
+      cedula: $("#ee-cedula").value.trim() || null,
+      celular: $("#ee-celular").value.trim() || null,
+      municipio: $("#ee-municipio").value.trim() || null,
+      sector: $("#ee-sector").value.trim() || null,
+      acompanantes: Math.max(0, parseInt($("#ee-acompanantes").value,10) || 0),
+      coordinador: $("#ee-coordinador").value.trim() || null
+    };
+    if(!cambios.nombre){ showMsg("#editEvMsg","El nombre no puede quedar vacío.","err"); return; }
+    const {error} = await supabaseClient.from("orlando_evento_asistencia").update(cambios).eq("id", id);
+    if(error){ showMsg("#editEvMsg","No se pudo guardar: "+error.message,"err"); return; }
+    showMsg("#editEvMsg","Guardado.","ok");
+    await renderEvento();
+    setTimeout(()=> $("#modalBg").classList.remove("show"), 800);
+  });
 
   $("#evBuscador").addEventListener("input", (e)=>{ EVENTO_FILTROS.q = e.target.value.trim().toLowerCase(); renderEventoLista(); });
   $("#evFiltroCoord").addEventListener("change", (e)=>{ EVENTO_FILTROS.coordinador = e.target.value; renderEventoLista(); });
@@ -2122,6 +2223,9 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       }
       conteo[clave] = (conteo[clave]||0) + 1;
     });
+    if(campo === "coordinador"){
+      USUARIOS.filter(u=>u.tipo==="coordinador").forEach(u=>{ if(!(u.nombre in conteo)) conteo[u.nombre] = 0; });
+    }
     return Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
   }
 
