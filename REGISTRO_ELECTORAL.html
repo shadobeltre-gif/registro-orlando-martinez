@@ -423,8 +423,9 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
   <div class="seal"><b id="sealCount">0</b><span>Votantes</span></div>
   <div class="role-bar">
     <span>Sesión: <b id="sessionName">—</b> <span id="realtimeIndicator" style="font-size:11px; margin-left:6px;"></span></span>
-    <span style="display:flex; gap:6px;">
+    <span style="display:flex; gap:6px; flex-wrap:wrap;">
       <button id="btnSyncRapido" style="display:none;">Sincronizar</button>
+      <button id="btnCompartirApp" style="display:none;">🔗 Compartir app</button>
       <button id="btnCambiarPass">Contraseña</button>
       <button id="btnLogout">Cerrar sesión</button>
     </span>
@@ -497,6 +498,11 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       <div class="stat"><b id="evAcompanantes">0</b><span>Acompañantes</span></div>
       <div class="stat"><b id="evGranTotal">0</b><span>Total esperado</span></div>
     </div>
+    <div class="stats">
+      <div class="stat" style="border-color:var(--ok);"><b id="evPresentes">0</b><span>Presentes</span></div>
+      <div class="stat" style="border-color:var(--rojo);"><b id="evNoAsistio">0</b><span>No asistieron</span></div>
+      <div class="stat"><b id="evSinMarcar">0</b><span>Sin marcar</span></div>
+    </div>
     <div class="stats" id="evStatsCoordCard">
       <div class="stat"><b id="evTotalCoords">0</b><span>Coordinadores</span></div>
       <div class="stat"><b id="evCoordsConCodigo">0</b><span>Con enlace generado</span></div>
@@ -530,6 +536,12 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       </div>
       <div class="filters">
         <select id="evFiltroCoord"><option value="">Coordinador: todos</option></select>
+        <select id="evFiltroAsistio">
+          <option value="">Asistencia: todos</option>
+          <option value="si">Presentes</option>
+          <option value="no">No asistieron</option>
+          <option value="pendiente">Sin marcar</option>
+        </select>
       </div>
       <div style="display:flex; gap:8px; margin-bottom:10px;">
         <button class="btn btn-sm btn-gold" id="btnEvVistaTabla">☰ Tabla</button>
@@ -544,7 +556,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
           <thead>
             <tr>
               <th></th><th>Nombre</th><th>Cédula</th><th>Celular</th><th>Municipio</th><th>Sector</th>
-              <th>Acomp.</th><th>Coordinador</th><th>Invitado por</th><th>Fecha</th><th>Acciones</th>
+              <th>Acomp.</th><th>Coordinador</th><th>Invitado por</th><th>Asistencia</th><th>Fecha</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody id="evTablaBody"></tbody>
@@ -911,7 +923,16 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
 
   <!-- ===================== CONFIGURACIÓN (solo admin) ===================== -->
   <section id="v-config" class="view">
-    <div class="card">
+    <div class="card" id="configMenuCard">
+      <h2><span class="n">Menú</span> Configuración</h2>
+      <div class="report-grid">
+        <button class="report-btn" data-modulo="mod-candidato"><b>📷 Datos del candidato</b><span>Nombre, cargo, circunscripción y foto</span></button>
+        <button class="report-btn" data-modulo="mod-admins"><b>👤 Administradores</b><span>Crear y ver otras cuentas de admin</span></button>
+      </div>
+    </div>
+
+    <div class="card config-modulo" id="mod-candidato" style="display:none;">
+      <button type="button" class="btn btn-outline btn-sm" id="btnVolverConfig1" style="margin-bottom:14px;">← Volver al menú</button>
       <h2><span class="n">Marca</span> Datos de la campaña</h2>
       <p style="font-size:12.5px; color:var(--gris); margin:0 0 14px;">
         Cambia estos datos para adaptar el sistema a otro candidato. El nombre, cargo y circunscripción se actualizan
@@ -940,7 +961,8 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       </p>
     </div>
 
-    <div class="card">
+    <div class="card config-modulo" id="mod-admins" style="display:none;">
+      <button type="button" class="btn btn-outline btn-sm" id="btnVolverConfig2" style="margin-bottom:14px;">← Volver al menú</button>
       <h2><span class="n">Acceso</span> Administradores</h2>
       <p style="font-size:12.5px; color:var(--gris); margin:0 0 14px;">
         Crea otra cuenta con acceso total de administrador (todas las pestañas, todos los datos).
@@ -1195,8 +1217,23 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       $("#cfgFotoPreview").style.display = "none";
       $("#btnQuitarFoto").style.display = "none";
     }
-    renderListaAdmins();
   }
+
+  function mostrarMenuConfig(){
+    $$(".config-modulo").forEach(m=> m.style.display = "none");
+    $("#configMenuCard").style.display = "block";
+  }
+  function abrirModuloConfig(id){
+    $("#configMenuCard").style.display = "none";
+    $$(".config-modulo").forEach(m=> m.style.display = (m.id===id ? "block" : "none"));
+    if(id === "mod-candidato") llenarFormularioConfig();
+    if(id === "mod-admins") renderListaAdmins();
+  }
+  $$(".report-btn[data-modulo]").forEach(btn=>{
+    btn.addEventListener("click", ()=> abrirModuloConfig(btn.dataset.modulo));
+  });
+  $("#btnVolverConfig1").addEventListener("click", mostrarMenuConfig);
+  $("#btnVolverConfig2").addEventListener("click", mostrarMenuConfig);
 
   function renderListaAdmins(){
     const admins = USUARIOS.filter(u=>u.tipo==="admin");
@@ -1375,7 +1412,11 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       $("#btnConfirmarAsistenciaTop").textContent = "Confirmar ✓";
 
       if(error){
-        $("#eventoError").textContent = "No se pudo enviar. Intenta de nuevo.";
+        if(error.code === "23505"){
+          $("#eventoError").textContent = "Esa cédula ya confirmó asistencia antes. Si crees que es un error, avísale a tu coordinador.";
+        } else {
+          $("#eventoError").textContent = "No se pudo enviar. Intenta de nuevo.";
+        }
         $("#eventoError").classList.add("show");
         console.error(error);
         return;
@@ -1387,6 +1428,19 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       ok.className = "msg show ok";
       ok.style.display = "block";
       ok.textContent = "✓ ¡Asistencia confirmada, "+nombre+"! Nos vemos el 25.";
+
+      const urlInvitar = window.location.origin + window.location.pathname + (codigo ? "?evento="+codigo : "");
+      const textoInvitar = encodeURIComponent(`Hola, te invito a la actividad de ${BRANDING.nombre} del 25. Confirma tu asistencia aquí: ${urlInvitar}`);
+      const opciones = document.createElement("div");
+      opciones.style.marginTop = "14px";
+      opciones.innerHTML = `
+        <a class="btn btn-block" style="background:#25D366; color:#fff;" target="_blank" rel="noopener" href="https://wa.me/?text=${textoInvitar}">📲 Invitar a alguien más</a>
+        <button class="btn btn-outline btn-block" id="btnTerminarEvento" style="margin-top:8px;">Terminar</button>`;
+      ok.insertAdjacentElement("afterend", opciones);
+      document.getElementById("btnTerminarEvento").addEventListener("click", ()=>{
+        opciones.innerHTML = `<p style="text-align:center; color:var(--gris); font-size:13px; margin-top:10px;">Ya puedes cerrar esta ventana. ¡Gracias!</p>`;
+        try{ window.close(); }catch(e){ /* algunos navegadores no permiten cerrar pestañas abiertas por el usuario */ }
+      });
     }
     $("#btnConfirmarAsistencia").addEventListener("click", confirmarAsistencia);
     $("#btnConfirmarAsistenciaTop").addEventListener("click", confirmarAsistencia);
@@ -1544,6 +1598,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     $("#fil-coord").style.display = isAdmin ? "block" : "none";
     $("#btnCambiarPass").textContent = isAdmin ? "Contraseña" : "Código";
     $("#btnSyncRapido").style.display = supabaseClient ? "inline-flex" : "none";
+    $("#btnCompartirApp").style.display = isAdmin ? "inline-flex" : "none";
 
     if(!isAdmin){
       const p = session.permisos || {ver:true, nuevo:true, modificar:false, eliminar:false};
@@ -1578,7 +1633,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       if(btn.dataset.view === "v-evento") renderEvento();
       if(btn.dataset.view === "v-listado") renderLista();
       if(btn.dataset.view === "v-coordinadores") renderCoordList();
-      if(btn.dataset.view === "v-config") llenarFormularioConfig();
+      if(btn.dataset.view === "v-config") mostrarMenuConfig();
       if(btn.dataset.view === "v-padron") updatePadronStats();
       if(btn.dataset.view === "v-sync") updateSyncPanel();
     });
@@ -2166,7 +2221,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     return new Date(fechaIso).toLocaleDateString("es-DO");
   }
 
-  let EVENTO_FILTROS = { q:"", coordinador:"" };
+  let EVENTO_FILTROS = { q:"", coordinador:"", asistio:"" };
 
   async function renderEvento(){
     if(!supabaseClient){
@@ -2185,6 +2240,9 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     $("#evTotal").textContent = totalPersonas;
     $("#evAcompanantes").textContent = totalAcompanantes;
     $("#evGranTotal").textContent = totalPersonas + totalAcompanantes;
+    $("#evPresentes").textContent = filas.filter(f=>f.asistio === true).length;
+    $("#evNoAsistio").textContent = filas.filter(f=>f.asistio === false).length;
+    $("#evSinMarcar").textContent = filas.filter(f=> f.asistio !== true && f.asistio !== false).length;
 
     const isAdmin = session && session.role === "admin";
     $("#evReportesCard").style.display = isAdmin ? "block" : "none";
@@ -2214,6 +2272,9 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     const filas = window._eventoFilas || [];
     return filas.filter(f=>{
       if(EVENTO_FILTROS.coordinador && f.coordinador !== EVENTO_FILTROS.coordinador) return false;
+      if(EVENTO_FILTROS.asistio === "si" && f.asistio !== true) return false;
+      if(EVENTO_FILTROS.asistio === "no" && f.asistio !== false) return false;
+      if(EVENTO_FILTROS.asistio === "pendiente" && (f.asistio === true || f.asistio === false)) return false;
       if(EVENTO_FILTROS.q){
         const hay = ((f.nombre||"")+" "+(f.cedula||"")+" "+(f.celular||"")).toLowerCase();
         if(!hay.includes(EVENTO_FILTROS.q)) return false;
@@ -2230,19 +2291,33 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     renderCoordList();
   });
 
+  function badgeAsistencia(f){
+    if(f.asistio === true) return '<span style="color:var(--ok); font-weight:700; font-size:11px;">✓ Presente</span>';
+    if(f.asistio === false) return '<span style="color:var(--rojo); font-weight:700; font-size:11px;">✗ No asistió</span>';
+    return '<span style="color:var(--gris); font-size:11px;">Sin marcar</span>';
+  }
+  function botonesCheckin(f){
+    return `
+      <button class="btn btn-sm" style="background:var(--ok); color:#fff;" data-evaccion="marcarPresente" data-id="${f.id}">✓ Presente</button>
+      <button class="btn btn-sm" style="background:var(--rojo); color:#fff;" data-evaccion="marcarNoAsistio" data-id="${f.id}">✗ No vino</button>`;
+  }
+
   function renderEventoLista(){
     const filas = eventoFilasFiltradas();
     const isAdmin = session && session.role === "admin";
+    const puedeMarcar = isAdmin || (session && session.role === "coordinador");
     $("#evToolbarSeleccion").style.display = isAdmin ? "flex" : "none";
     $("#evLista").innerHTML = filas.length ? filas.slice(0,150).map(f=>`
       <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--papel-linea); gap:8px;">
         <div style="min-width:0;">
           <b style="font-family:var(--font-display); color:var(--azul-950); font-size:14px;">${escapeHtml(f.nombre)}</b>
           <div style="font-size:11.5px; color:var(--gris);">${f.acompanantes ? "+"+f.acompanantes+" acompañante(s) · " : ""}${escapeHtml(f.coordinador||"Sin coordinador")}${f.invitado_por ? " · Invitado por: "+escapeHtml(f.invitado_por) : ""}${f.municipio ? " · "+escapeHtml(f.municipio) : ""}${f.celular ? " · "+escapeHtml(f.celular) : ""}</div>
-          ${isAdmin ? `<div style="display:flex; gap:6px; margin-top:6px;">
-            <button class="btn btn-sm btn-gold" data-evaccion="editar" data-id="${f.id}">Editar</button>
-            <button class="btn btn-sm btn-red" data-evaccion="borrar" data-id="${f.id}">Borrar</button>
-          </div>` : ""}
+          <div style="margin-top:4px;">${badgeAsistencia(f)}</div>
+          <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+            ${puedeMarcar ? botonesCheckin(f) : ""}
+            ${isAdmin ? `<button class="btn btn-sm btn-gold" data-evaccion="editar" data-id="${f.id}">Editar</button>
+            <button class="btn btn-sm btn-red" data-evaccion="borrar" data-id="${f.id}">Borrar</button>` : ""}
+          </div>
         </div>
         <span style="font-size:11px; color:var(--gris); font-family:var(--font-mono); white-space:nowrap;">${tiempoTranscurrido(f.fecha)}</span>
       </div>
@@ -2259,15 +2334,17 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
         <td class="count">${f.acompanantes||0}</td>
         <td style="font-size:11.5px;">${escapeHtml(f.coordinador||"—")}</td>
         <td style="font-size:11.5px;">${escapeHtml(f.invitado_por||"—")}</td>
+        <td>${badgeAsistencia(f)}</td>
         <td style="font-size:11px; color:var(--gris); white-space:nowrap;">${tiempoTranscurrido(f.fecha)}</td>
-        <td>${isAdmin ? `
-          <div style="display:flex; flex-direction:column; gap:4px; min-width:70px;">
-            <button class="btn btn-sm btn-gold" data-evaccion="editar" data-id="${f.id}">Editar</button>
-            <button class="btn btn-sm btn-red" data-evaccion="borrar" data-id="${f.id}">Borrar</button>
-          </div>` : ""}
+        <td>
+          <div style="display:flex; flex-direction:column; gap:4px; min-width:90px;">
+            ${puedeMarcar ? botonesCheckin(f) : ""}
+            ${isAdmin ? `<button class="btn btn-sm btn-gold" data-evaccion="editar" data-id="${f.id}">Editar</button>
+            <button class="btn btn-sm btn-red" data-evaccion="borrar" data-id="${f.id}">Borrar</button>` : ""}
+          </div>
         </td>
       </tr>
-    `).join("") : '<tr><td colspan="11"><div class="empty"><b>Sin resultados</b>Ajusta la búsqueda o comparte el enlace de invitación.</div></td></tr>';
+    `).join("") : '<tr><td colspan="12"><div class="empty"><b>Sin resultados</b>Ajusta la búsqueda o comparte el enlace de invitación.</div></td></tr>';
     $$(".ev-check").forEach(chk=> chk.addEventListener("change", actualizarBotonEvBorrarSeleccionados));
     actualizarBotonEvBorrarSeleccionados();
   }
@@ -2312,6 +2389,20 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     const filas = window._eventoFilas || [];
     const f = filas.find(x=>String(x.id)===String(id));
     if(!f) return;
+
+    if(btn.dataset.evaccion === "marcarPresente" || btn.dataset.evaccion === "marcarNoAsistio"){
+      if(!supabaseClient || !navigator.onLine){ alert("Necesitas internet para marcar la asistencia."); return; }
+      const nuevoValor = btn.dataset.evaccion === "marcarPresente";
+      const valorFinal = (f.asistio === nuevoValor) ? null : nuevoValor; // tocar de nuevo lo mismo lo deja "sin marcar"
+      const {error} = await supabaseClient.from("orlando_evento_asistencia").update({asistio: valorFinal}).eq("id", f.id);
+      if(error){ alert("No se pudo guardar: "+error.message); return; }
+      f.asistio = valorFinal;
+      renderEventoLista();
+      $("#evPresentes").textContent = filas.filter(x=>x.asistio === true).length;
+      $("#evNoAsistio").textContent = filas.filter(x=>x.asistio === false).length;
+      $("#evSinMarcar").textContent = filas.filter(x=> x.asistio !== true && x.asistio !== false).length;
+      return;
+    }
 
     if(btn.dataset.evaccion === "editar"){
       $("#modalTitle").textContent = "Editar confirmación";
@@ -2372,11 +2463,12 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
 
   $("#evBuscador").addEventListener("input", (e)=>{ EVENTO_FILTROS.q = e.target.value.trim().toLowerCase(); renderEventoLista(); });
   $("#evFiltroCoord").addEventListener("change", (e)=>{ EVENTO_FILTROS.coordinador = e.target.value; renderEventoLista(); });
+  $("#evFiltroAsistio").addEventListener("change", (e)=>{ EVENTO_FILTROS.asistio = e.target.value; renderEventoLista(); });
 
   $("#btnExportEvento").addEventListener("click", ()=>{
     const filas = eventoFilasFiltradas();
-    const rows = [["Nombre","Cédula","Celular","Municipio","Distrito","Sector","Acompañantes","Coordinador","Invitado por","Código usado","Fecha"]];
-    filas.forEach(f=> rows.push([f.nombre, f.cedula, f.celular, f.municipio, f.distrito, f.sector, f.acompanantes, f.coordinador, f.invitado_por, f.codigo_usado, f.fecha ? new Date(f.fecha).toLocaleString("es-DO") : ""]));
+    const rows = [["Nombre","Cédula","Celular","Municipio","Distrito","Sector","Acompañantes","Coordinador","Invitado por","Asistió","Código usado","Fecha"]];
+    filas.forEach(f=> rows.push([f.nombre, f.cedula, f.celular, f.municipio, f.distrito, f.sector, f.acompanantes, f.coordinador, f.invitado_por, f.asistio===true?"Sí":(f.asistio===false?"No":"Sin marcar"), f.codigo_usado, f.fecha ? new Date(f.fecha).toLocaleString("es-DO") : ""]));
     downloadXLSX(rows, "asistencia_evento_filtrada.xlsx", "Asistencia");
   });
 
@@ -3038,6 +3130,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
   let SYNC_CONFIG = { url: SYNC_CONFIG_DEFAULT.url, key: SYNC_CONFIG_DEFAULT.key, lastSync:null, auto:true };
   let supabaseClient = null;
   let sincronizando = false;
+  let _ultimosConflictosCedula = [];
 
   // Adaptador de almacenamiento para Supabase Auth respaldado en IndexedDB
   // (nunca localStorage, para que la sesión persista entre aperturas de la app
@@ -3124,7 +3217,12 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       await putIn(STORE_SYNC_CONFIG, {id:1, ...SYNC_CONFIG});
       await refreshAll();
       updateSyncPanel();
-      if(!silencioso) showMsg("#syncConfigMsg","Sincronización completada.","ok");
+      if(_ultimosConflictosCedula.length){
+        const detalle = _ultimosConflictosCedula.slice(0,5).map(c=>`• ${c.cedula}: "${c.nombreLocal}" (aquí) vs. "${c.nombreNube}" (en la nube)`).join("\n");
+        showMsg("#syncConfigMsg", `⚠ ${_ultimosConflictosCedula.length} registro(s) NO se sincronizaron por tener la misma cédula que otra persona ya registrada. Revísalos y corrige la cédula que esté mal: ${detalle}`, "err");
+      } else if(!silencioso){
+        showMsg("#syncConfigMsg","Sincronización completada.","ok");
+      }
     }catch(e){
       console.error(e);
       if(!silencioso) showMsg("#syncConfigMsg","Ocurrió un error sincronizando. Intenta de nuevo.","err");
@@ -3134,6 +3232,25 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     }
   }
   $("#btnSincronizarAhora").addEventListener("click", ()=> sincronizarAhora(false));
+  $("#btnCompartirApp").addEventListener("click", ()=>{
+    const url = window.location.origin + window.location.pathname;
+    const texto = encodeURIComponent(`Este es el enlace del sistema de registro de ${BRANDING.nombre}: ${url}\nEntra con tu correo/código de administrador o coordinador.`);
+    $("#modalTitle").textContent = "Compartir el sistema";
+    $("#modalBody").innerHTML = `
+      <p style="font-size:12.5px; color:var(--gris); margin:0 0 14px;">
+        Cualquiera con una cuenta ya creada (administrador o coordinador) puede entrar desde este mismo enlace —
+        no se necesita un enlace distinto para cada quien.
+      </p>
+      <p style="font-family:var(--font-mono); font-size:12px; background:var(--papel); border-radius:8px; padding:10px; word-break:break-all; margin:0 0 14px;">${url}</p>
+      <a class="btn btn-block" style="background:#25D366; color:#fff;" target="_blank" rel="noopener" href="https://wa.me/?text=${texto}">📲 Compartir por WhatsApp</a>
+      <button class="btn btn-outline btn-block" id="btnCopiarLinkApp" style="margin-top:8px;">📋 Copiar enlace</button>`;
+    $("#modalBg").classList.add("show");
+    document.getElementById("btnCopiarLinkApp").addEventListener("click", async ()=>{
+      try{ await navigator.clipboard.writeText(url); document.getElementById("btnCopiarLinkApp").textContent = "Copiado ✓"; }
+      catch(e){ prompt("Copia este enlace manualmente:", url); }
+    });
+  });
+
   $("#btnSyncRapido").addEventListener("click", async ()=>{
     const btn = $("#btnSyncRapido");
     btn.disabled = true; const textoOriginal = btn.textContent; btn.textContent = "Sincronizando…";
@@ -3152,12 +3269,37 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     const locales = await getAll();
     // Un coordinador solo empuja lo suyo (por si quedó algo ajeno de una sincronización anterior)
     const localesPropios = esCoordinador ? locales.filter(v=> v.coordinador === session.nombre) : locales;
-    const filasRemotas = localesPropios.filter(v=>v.cedula).map(v=>({
+    const filasCandidatas = localesPropios.filter(v=>v.cedula).map(v=>({
       cedula: v.cedula, nombre: v.nombre, celular: v.celular, provincia: v.provincia, municipio: v.municipio,
       distrito: v.distrito, sector: v.sector, recinto: v.recinto, mesa: v.mesa, coordinador: v.coordinador,
       observacion: v.observacion, fecha: v.fecha, updated_at: v.updatedAt || v.fecha || new Date().toISOString(),
       deleted: !!v.deleted
     }));
+
+    // Protección contra choques de cédula: si en la nube ya existe esa cédula a nombre de
+    // OTRA persona (no es solo una edición de la misma), no se sobrescribe — se avisa.
+    const conflictosCedula = [];
+    const filasRemotas = [];
+    for(const lote of chunk(filasCandidatas, 200)){
+      const cedulasLote = lote.map(f=>f.cedula);
+      let remotasExistentes = [];
+      if(cedulasLote.length){
+        const {data} = await supabaseClient.from("orlando_votantes").select("cedula,nombre").in("cedula", cedulasLote);
+        remotasExistentes = data || [];
+      }
+      const remotoPorCedula = new Map(remotasExistentes.map(r=>[r.cedula, r.nombre]));
+      lote.forEach(f=>{
+        const nombreRemoto = remotoPorCedula.get(f.cedula);
+        const normal = s=> (s||"").trim().toUpperCase().replace(/\s+/g," ");
+        if(!f.deleted && nombreRemoto && normal(nombreRemoto) !== normal(f.nombre)){
+          conflictosCedula.push({cedula:f.cedula, nombreLocal:f.nombre, nombreNube:nombreRemoto});
+        } else {
+          filasRemotas.push(f);
+        }
+      });
+    }
+    _ultimosConflictosCedula = conflictosCedula;
+
     for(const lote of chunk(filasRemotas, 250)){
       if(lote.length){
         const {error} = await supabaseClient.from("orlando_votantes").upsert(lote, {onConflict:"cedula"});
