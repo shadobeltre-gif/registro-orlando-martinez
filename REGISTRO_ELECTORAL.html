@@ -782,9 +782,12 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       <div id="padronMsg" class="msg"></div>
       <p style="font-size:12.5px; color:var(--gris); margin:0 0 12px;">
         Sube el padrón que te haya entregado el PRM o la JCE en cualquier formato: Excel (.xlsx/.xls), CSV o texto (.txt).
-        El sistema busca automáticamente la columna de cédula (y nombre, si existe); si el archivo no tiene columnas claras,
-        extrae cualquier número de 11 dígitos que encuentre. Los datos quedan guardados solo en este dispositivo.
+        El sistema busca automáticamente las columnas de <b>Cédula, Nombre, Celular, Provincia, Municipio, Distrito,
+        Sector, Recinto y Mesa</b> — exactamente los mismos campos del formulario de registro — y las usa luego para
+        autocompletar. Si el archivo no tiene columnas claras, al menos extrae cualquier número de 11 dígitos que
+        encuentre. Los datos quedan guardados solo en este dispositivo hasta que sincronices.
       </p>
+      <button class="btn btn-outline btn-block" id="btnPlantillaPadron" style="margin-bottom:10px;">⬇️ Descargar plantilla del padrón (Excel)</button>
       <input type="file" id="padronFile" accept=".csv,.txt,.xlsx,.xls">
       <button class="btn btn-primary" id="btnCargarPadron">Procesar y cargar archivo</button>
     </div>
@@ -1413,11 +1416,23 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
 
       if(error){
         if(error.code === "23505"){
-          $("#eventoError").textContent = "Esa cédula ya confirmó asistencia antes. Si crees que es un error, avísale a tu coordinador.";
+          $("#modalTitle").textContent = "⚠ Ya estás registrado";
+          $("#modalClose").style.display = "none";
+          $("#modalBody").innerHTML = `
+            <div class="msg show err">Esa cédula ya confirmó asistencia antes</div>
+            <p style="font-size:14.5px; margin:14px 0; line-height:1.5;">
+              Si crees que es un error, avísale a tu coordinador.
+            </p>
+            <button class="btn btn-primary btn-block" id="btnOkEventoDuplicado">Entendido</button>`;
+          $("#modalBg").classList.add("show");
+          document.getElementById("btnOkEventoDuplicado").addEventListener("click", ()=>{
+            $("#modalBg").classList.remove("show");
+            $("#modalClose").style.display = "";
+          });
         } else {
           $("#eventoError").textContent = "No se pudo enviar. Intenta de nuevo.";
+          $("#eventoError").classList.add("show");
         }
-        $("#eventoError").classList.add("show");
         console.error(error);
         return;
       }
@@ -1895,6 +1910,23 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     const digitoEsperado = (10 - (suma % 10)) % 10;
     return digitoEsperado === Number(cedulaSinGuiones[10]);
   }
+  function mostrarModalCedulaDuplicada(dup){
+    $("#modalTitle").textContent = "⚠ Cédula ya registrada";
+    $("#modalClose").style.display = "none";
+    $("#modalBody").innerHTML = `
+      <div class="msg show err">Esta cédula ya está registrada en el sistema</div>
+      <p style="font-size:14.5px; margin:14px 0; line-height:1.5;">
+        <b>${escapeHtml(dup.nombre)}</b> ya fue registrado(a) con esta cédula${dup.coordinador ? " por "+escapeHtml(dup.coordinador) : ""}.
+        No se puede volver a registrar la misma persona dos veces.
+      </p>
+      <button class="btn btn-primary btn-block" id="btnOkCedulaDuplicada">Entendido</button>`;
+    $("#modalBg").classList.add("show");
+    document.getElementById("btnOkCedulaDuplicada").addEventListener("click", ()=>{
+      $("#modalBg").classList.remove("show");
+      $("#modalClose").style.display = "";
+    });
+  }
+
   $("#f-cedula").addEventListener("input", (e)=>{
     let v = e.target.value.replace(/\D/g,"").slice(0,11);
     if(v.length > 3) v = v.slice(0,3)+"-"+v.slice(3);
@@ -1914,12 +1946,39 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     if(PADRON_SET.size === 0){
       pp.textContent = "";
     } else if(PADRON_SET.has(soloDigitos)){
-      const nombrePadron = PADRON_MAP.get(soloDigitos);
-      pp.textContent = "✓ Aparece en el padrón cargado" + (nombrePadron ? ": "+nombrePadron : "");
+      const datosPadron = PADRON_MAP.get(soloDigitos);
+      pp.textContent = "✓ Aparece en el padrón cargado" + (datosPadron && datosPadron.nombre ? ": "+datosPadron.nombre : "");
       pp.style.color = "var(--ok)";
     } else {
       pp.textContent = "⚠ No aparece en el padrón cargado";
       pp.style.color = "var(--rojo)";
+    }
+
+    // Ya registrado en el sistema: avisa de inmediato con ventana bloqueante y no deja seguir con esa cédula.
+    const dupLocal = ALL.find(x=> x.cedula === v && x.id !== editingId);
+    if(dupLocal){
+      mostrarModalCedulaDuplicada(dupLocal);
+      e.target.value = "";
+      p.textContent = ""; link.style.display = "none"; pp.textContent = "";
+      $("#f-nombre").focus();
+      return;
+    }
+
+    // Si no está duplicada y aparece en el padrón, autocompleta TODOS los datos disponibles
+    // (sin pisar lo que la persona ya haya escrito a mano en cada campo).
+    if(PADRON_SET.has(soloDigitos)){
+      const dp = PADRON_MAP.get(soloDigitos);
+      if(dp){
+        if(dp.nombre && !$("#f-nombre").value.trim()) $("#f-nombre").value = dp.nombre;
+        if(dp.celular && !$("#f-cel").value.trim()){ $("#f-cel").value = dp.celular; formatearCelular({target:$("#f-cel")}); }
+        if(dp.sector && !$("#f-sector").value.trim()) $("#f-sector").value = dp.sector;
+        if(dp.recinto && !$("#f-recinto").value.trim()) $("#f-recinto").value = dp.recinto;
+        if(dp.mesa && !$("#f-mesa").value.trim()) $("#f-mesa").value = dp.mesa;
+        const ubicacionVacia = !valorCampo("f-provincia") && !valorCampo("f-municipio") && !valorCampo("f-distrito");
+        if(ubicacionVacia && (dp.provincia || dp.municipio || dp.distrito)){
+          cargarUbicacionEnFormulario({provincia: dp.provincia||"", municipio: dp.municipio||"", distrito: dp.distrito||""});
+        }
+      }
     }
   });
   function formatearCelular(e){
@@ -3000,7 +3059,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
   async function loadPadron(){
     const rows = await getAllFrom(STORE_PADRON);
     PADRON_SET = new Set(rows.map(r=>r.cedula));
-    PADRON_MAP = new Map(rows.map(r=>[r.cedula, r.nombre||""]));
+    PADRON_MAP = new Map(rows.map(r=>[r.cedula, r]));
   }
 
   function normalizarTexto(s){
@@ -3023,6 +3082,11 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       ? `Último archivo: "${meta.archivo}" · ${meta.total} cédulas · cargado ${new Date(meta.fecha).toLocaleString("es-DO")}`
       : "Aún no se ha cargado ningún archivo.";
   }
+
+  $("#btnPlantillaPadron").addEventListener("click", ()=>{
+    const encabezados = ["Cédula","Nombre","Celular","Provincia","Municipio","Distrito","Sector","Recinto","Mesa"];
+    downloadXLSX([encabezados, encabezados.map(()=>"")], "plantilla_padron.xlsx", "Padrón");
+  });
 
   $("#btnCargarPadron").addEventListener("click", ()=>{
     const fileInput = $("#padronFile");
@@ -3050,17 +3114,26 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
   async function procesarFilasPadron(aoa, nombreArchivo){
     if(!aoa || aoa.length === 0){ showMsg("#padronMsg","El archivo está vacío.","err"); return; }
 
-    // Buscar fila de encabezado y columnas de cédula / nombre
-    let colCedula = -1, colNombre = -1, filaInicio = 0;
+    // Buscar fila de encabezado y todas las columnas reconocibles
+    let colCedula = -1, colNombre = -1, colProvincia = -1, colMunicipio = -1, colDistrito = -1,
+        colSector = -1, colRecinto = -1, colMesa = -1, colCelular = -1, filaInicio = 0;
     const primeraFila = aoa[0].map(normalizarTexto);
     primeraFila.forEach((celda, idx)=>{
       if(colCedula === -1 && /cedula|c\.i\.?$|documento|no\.?cedula/.test(celda)) colCedula = idx;
       if(colNombre === -1 && /nombre|apellido/.test(celda)) colNombre = idx;
+      if(colProvincia === -1 && /provincia/.test(celda)) colProvincia = idx;
+      if(colMunicipio === -1 && /municipio/.test(celda)) colMunicipio = idx;
+      if(colDistrito === -1 && /distrito/.test(celda)) colDistrito = idx;
+      if(colSector === -1 && /sector|barrio|comunidad|zona/.test(celda)) colSector = idx;
+      if(colRecinto === -1 && /recinto|local.*votac/.test(celda)) colRecinto = idx;
+      if(colMesa === -1 && /mesa|colegio/.test(celda)) colMesa = idx;
+      if(colCelular === -1 && /celular|telefono|movil/.test(celda)) colCelular = idx;
     });
     if(colCedula !== -1) filaInicio = 1; // hay encabezado reconocido
 
-    const encontrados = new Map(); // cedula -> nombre
+    const encontrados = new Map(); // cedula -> {nombre, provincia, municipio, distrito, sector, recinto, mesa, celular}
     let filasLeidas = 0, invalidas = 0;
+    const tomar = (fila, col)=> (col !== -1 && fila[col] !== undefined) ? String(fila[col]).trim() : "";
 
     for(let i = filaInicio; i < aoa.length; i++){
       const fila = aoa[i];
@@ -3071,7 +3144,7 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
 
       if(colCedula !== -1 && fila[colCedula] !== undefined){
         cedula = String(fila[colCedula]).replace(/\D/g,"");
-        if(colNombre !== -1 && fila[colNombre] !== undefined) nombre = String(fila[colNombre]).trim();
+        nombre = tomar(fila, colNombre);
       }
 
       if(cedula.length !== 11){
@@ -3087,7 +3160,17 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
       }
 
       if(cedula.length === 11){
-        encontrados.set(cedula, nombre || encontrados.get(cedula) || "");
+        const previo = encontrados.get(cedula) || {};
+        encontrados.set(cedula, {
+          nombre: nombre || previo.nombre || "",
+          provincia: tomar(fila, colProvincia) || previo.provincia || "",
+          municipio: tomar(fila, colMunicipio) || previo.municipio || "",
+          distrito: tomar(fila, colDistrito) || previo.distrito || "",
+          sector: tomar(fila, colSector) || previo.sector || "",
+          recinto: tomar(fila, colRecinto) || previo.recinto || "",
+          mesa: tomar(fila, colMesa) || previo.mesa || "",
+          celular: tomar(fila, colCelular) || previo.celular || ""
+        });
       } else {
         invalidas++;
       }
@@ -3099,14 +3182,15 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     }
 
     // Guardar en IndexedDB (fusiona con lo ya cargado)
-    for(const [cedula, nombre] of encontrados){
-      await putIn(STORE_PADRON, {cedula, nombre, updatedAt:new Date().toISOString()});
+    for(const [cedula, datos] of encontrados){
+      await putIn(STORE_PADRON, {cedula, ...datos, updatedAt:new Date().toISOString()});
     }
     await putIn(STORE_PADRON_META, {id:1, archivo: nombreArchivo, total: encontrados.size, fecha: new Date().toISOString()});
 
+    const columnasExtra = [colProvincia,colMunicipio,colDistrito,colSector,colRecinto,colMesa,colCelular].filter(c=>c!==-1).length;
     await loadPadron();
     await updatePadronStats();
-    showMsg("#padronMsg", `Listo: ${encontrados.size} cédulas cargadas desde "${nombreArchivo}"` + (invalidas ? ` (${invalidas} filas sin cédula reconocible fueron omitidas)` : "") + ".", "ok");
+    showMsg("#padronMsg", `Listo: ${encontrados.size} cédulas cargadas desde "${nombreArchivo}"` + (columnasExtra ? ` con ${columnasExtra} columna(s) extra para autocompletar` : "") + (invalidas ? ` (${invalidas} filas sin cédula reconocible fueron omitidas)` : "") + ".", "ok");
     $("#padronFile").value = "";
   }
 
@@ -3359,7 +3443,11 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
 
   async function sincronizarPadron(){
     const locales = await getAllFrom(STORE_PADRON);
-    const filas = locales.map(p=>({ cedula: p.cedula, nombre: p.nombre||"", updated_at: p.updatedAt || new Date().toISOString() }));
+    const filas = locales.map(p=>({
+      cedula: p.cedula, nombre: p.nombre||"", provincia: p.provincia||"", municipio: p.municipio||"",
+      distrito: p.distrito||"", sector: p.sector||"", recinto: p.recinto||"", mesa: p.mesa||"", celular: p.celular||"",
+      updated_at: p.updatedAt || new Date().toISOString()
+    }));
     for(const lote of chunk(filas, 500)){
       if(lote.length){
         const {error} = await supabaseClient.from("orlando_padron").upsert(lote, {onConflict:"cedula"});
@@ -3371,7 +3459,11 @@ const RD_BARRIOS=[{"i":1,"s":1,"n":"Los Peralejos"},{"i":2,"s":1,"n":"Palma Real
     for(const r of (remotos||[])){
       const local = locales.find(p=>p.cedula===r.cedula);
       if(!local || new Date(r.updated_at||0).getTime() > new Date(local.updatedAt||0).getTime()){
-        await putIn(STORE_PADRON, {cedula:r.cedula, nombre:r.nombre||"", updatedAt:r.updated_at});
+        await putIn(STORE_PADRON, {
+          cedula:r.cedula, nombre:r.nombre||"", provincia:r.provincia||"", municipio:r.municipio||"",
+          distrito:r.distrito||"", sector:r.sector||"", recinto:r.recinto||"", mesa:r.mesa||"", celular:r.celular||"",
+          updatedAt:r.updated_at
+        });
       }
     }
   }
